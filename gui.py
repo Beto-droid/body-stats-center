@@ -12,10 +12,16 @@ from streamlit_autorefresh import st_autorefresh
 
 from catalog import CARDIO_TYPES, EXERCISES, FOODS
 from database import (delete_cardio_session, delete_food_entry, delete_gym_session,
+                      delete_tape_measurement, delete_caliper_measurement,
                       get_all_measurements, get_cardio_sessions, get_daily_averages,
                       get_daily_nutrition, get_exercise_history, get_food_log,
                       get_gym_sessions, get_latest_measurement, init_db,
-                      log_cardio, log_food, log_gym_session)
+                      get_tape_measurements, get_caliper_measurements,
+                      log_cardio, log_food, log_gym_session,
+                      log_tape_measurement, log_caliper_measurement)
+from caliper import (jackson_pollock_3_male, jackson_pollock_3_female,
+                     jackson_pollock_7, caliper_results,
+                     JP3_MALE_SITES, JP3_FEMALE_SITES, JP7_SITES)
 
 # ── Scanner en background ─────────────────────────────────────────────────────
 _scanner_thread: threading.Thread | None = None
@@ -168,7 +174,7 @@ with st.sidebar:
     # ── Navegación ──
     page = st.radio(
         "Navegación",
-        ["⚖️  Balanza", "🏋️  Gym", "🍽️  Nutrición"],
+        ["⚖️  Balanza", "🏋️  Gym", "🍽️  Nutrición", "📏  Mediciones"],
         label_visibility="collapsed",
     )
     st.divider()
@@ -404,4 +410,239 @@ elif page == "🍽️  Nutrición":
         st.plotly_chart(fig_cal, key="cal_line", width="stretch")
     else:
         st.info("Registrá comidas para ver tus macros históricos.")
+
+# ═══════════════════════ PÁGINA: MEDICIONES ═══════════════════════════════════
+elif page == "📏  Mediciones":
+    st.title("📏 Mediciones Corporales")
+
+    from user_config import AGE, SEX
+
+    # Peso de la balanza (último registrado)
+    latest_scale = get_latest_measurement()
+    scale_weight = latest_scale["weight_kg"] if latest_scale else None
+
+    tab_tape, tab_caliper, tab_hist = st.tabs(["📐 Cinta métrica", "🔵 Calibrador (caliper)", "📈 Historial"])
+
+    # ── TAB: CINTA MÉTRICA ────────────────────────────────────────────────────
+    with tab_tape:
+        col_form, col_prev = st.columns([1, 1])
+
+        with col_form:
+            st.subheader("➕ Registrar medidas")
+            with st.form("tape_form", clear_on_submit=True):
+                date_tape = st.date_input("Fecha", value=datetime.now())
+                st.markdown("*Todas en centímetros. Dejá en 0 las que no mediste.*")
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    neck       = st.number_input("Cuello",          min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                    chest      = st.number_input("Pecho",           min_value=0.0, max_value=200.0, value=0.0, step=0.5)
+                    waist      = st.number_input("Cintura",         min_value=0.0, max_value=200.0, value=0.0, step=0.5)
+                    hips       = st.number_input("Caderas",         min_value=0.0, max_value=200.0, value=0.0, step=0.5)
+                    left_calf  = st.number_input("Pantorrilla izq", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                with c2:
+                    left_bicep  = st.number_input("Bíceps izq",    min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                    right_bicep = st.number_input("Bíceps der",    min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                    left_thigh  = st.number_input("Muslo izq",     min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                    right_thigh = st.number_input("Muslo der",     min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                    right_calf  = st.number_input("Pantorrilla der",min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+
+                notes_tape = st.text_input("Notas (opcional)")
+
+                if st.form_submit_button("💾 Guardar medidas", use_container_width=True):
+                    def _v(x): return x if x > 0 else None
+                    log_tape_measurement(
+                        str(date_tape), _v(neck), _v(chest), _v(waist), _v(hips),
+                        _v(left_bicep), _v(right_bicep), _v(left_thigh), _v(right_thigh),
+                        _v(left_calf), _v(right_calf), notes_tape
+                    )
+                    st.success("✅ Medidas guardadas!")
+                    st.rerun()
+
+        with col_prev:
+            st.subheader("📋 Últimas medidas")
+            tape_data = get_tape_measurements(days=90)
+            if tape_data:
+                latest_tape = tape_data[0]
+                fields = [
+                    ("Cuello",          "neck_cm"),
+                    ("Pecho",           "chest_cm"),
+                    ("Cintura",         "waist_cm"),
+                    ("Caderas",         "hips_cm"),
+                    ("Bíceps izq",      "left_bicep_cm"),
+                    ("Bíceps der",      "right_bicep_cm"),
+                    ("Muslo izq",       "left_thigh_cm"),
+                    ("Muslo der",       "right_thigh_cm"),
+                    ("Pantorrilla izq", "left_calf_cm"),
+                    ("Pantorrilla der", "right_calf_cm"),
+                ]
+                st.caption(f"🕐 {latest_tape['date']}")
+                r1, r2 = st.columns(2)
+                for i, (label, key) in enumerate(fields):
+                    val = latest_tape.get(key)
+                    with (r1 if i % 2 == 0 else r2):
+                        st.metric(label, f"{val:.1f} cm" if val else "—")
+
+                # Evolución de cintura
+                if len(tape_data) > 1:
+                    st.markdown("**📈 Evolución de cintura:**")
+                    waist_data = [{"timestamp": r["date"], "waist_cm": r["waist_cm"]} for r in reversed(tape_data) if r.get("waist_cm")]
+                    if waist_data:
+                        st.plotly_chart(make_line_chart(waist_data, "waist_cm", "Cintura (cm)", "#EF9A9A"),
+                                        key="waist_chart", width="stretch")
+
+                with st.expander("🗑️ Eliminar entrada"):
+                    del_tid = st.selectbox("Fecha", [r["id"] for r in tape_data],
+                                           format_func=lambda x: next(r["date"] for r in tape_data if r["id"]==x))
+                    if st.button("Eliminar", key="del_tape"):
+                        delete_tape_measurement(del_tid); st.rerun()
+            else:
+                st.info("Sin medidas aún.")
+
+    # ── TAB: CALIBRADOR ───────────────────────────────────────────────────────
+    with tab_caliper:
+        col_cal, col_res = st.columns([1, 1])
+
+        with col_cal:
+            st.subheader("🔵 Método de medición")
+
+            if scale_weight:
+                st.success(f"⚖️ Usando peso de la balanza: **{scale_weight:.2f} kg** (última medición)")
+            else:
+                st.warning("No hay peso en la balanza. Ingresalo manualmente.")
+
+            method = st.selectbox("Fórmula", [
+                "Jackson-Pollock 3 pliegues",
+                "Jackson-Pollock 7 pliegues",
+            ])
+
+            with st.form("caliper_form", clear_on_submit=True):
+                date_cal = st.date_input("Fecha  ", value=datetime.now())
+
+                weight_input = st.number_input(
+                    "Peso (kg)", min_value=30.0, max_value=250.0,
+                    value=float(scale_weight) if scale_weight else 80.0, step=0.1,
+                    help="Se carga automáticamente de la balanza. Podés modificarlo."
+                )
+                age_input = st.number_input("Edad", min_value=10, max_value=99, value=AGE)
+                sex_input = st.selectbox("Sexo", ["male", "female"], index=0 if SEX=="male" else 1,
+                                         format_func=lambda x: "Masculino" if x=="male" else "Femenino")
+
+                st.markdown("**Pliegues (mm) — medí 3 veces y usá el promedio:**")
+
+                if method == "Jackson-Pollock 3 pliegues":
+                    sites_def = JP3_MALE_SITES if sex_input == "male" else JP3_FEMALE_SITES
+                    values = []
+                    for label, _ in sites_def:
+                        values.append(st.number_input(label, min_value=0.0, max_value=100.0, value=0.0, step=0.5, key=f"cal_{label}"))
+                    site_vals = values + [None] * 4  # pad to 7
+                else:
+                    values = []
+                    for label, _ in JP7_SITES:
+                        values.append(st.number_input(label, min_value=0.0, max_value=100.0, value=0.0, step=0.5, key=f"cal7_{label}"))
+                    site_vals = values
+
+                notes_cal = st.text_input("Notas (opcional)  ")
+
+                submitted = st.form_submit_button("📊 Calcular y guardar", use_container_width=True)
+
+            if submitted:
+                # Calcular fat%
+                try:
+                    if method == "Jackson-Pollock 3 pliegues":
+                        if sex_input == "male":
+                            fat_pct = jackson_pollock_3_male(values[0], values[1], values[2], int(age_input))
+                        else:
+                            fat_pct = jackson_pollock_3_female(values[0], values[1], values[2], int(age_input))
+                    else:
+                        fat_pct = jackson_pollock_7(values[0], values[1], values[2], values[3],
+                                                     values[4], values[5], values[6], int(age_input), sex_input)
+
+                    fat_mass, lean_mass = caliper_results(fat_pct, weight_input)
+
+                    log_caliper_measurement(
+                        str(date_cal), method, weight_input, int(age_input), sex_input,
+                        site_vals, fat_pct, lean_mass, fat_mass, notes_cal
+                    )
+
+                    # Mostrar resultado prominente
+                    st.success("✅ Guardado!")
+                    with col_res:
+                        st.subheader("📊 Resultado")
+                        st.metric("🥩 % Grasa corporal", f"{fat_pct:.1f} %")
+                        st.metric("🏃 Masa magra",        f"{lean_mass:.2f} kg")
+                        st.metric("💧 Masa grasa",         f"{fat_mass:.2f} kg")
+                        st.metric("⚖️ Peso usado",         f"{weight_input:.2f} kg")
+
+                        # Clasificación
+                        if sex_input == "male":
+                            if fat_pct < 6:     cat = ("Esencial", "🔵")
+                            elif fat_pct < 14:  cat = ("Atlético", "🟢")
+                            elif fat_pct < 18:  cat = ("En forma", "🟢")
+                            elif fat_pct < 25:  cat = ("Normal",   "🟡")
+                            else:               cat = ("Obesidad",  "🔴")
+                        else:
+                            if fat_pct < 14:    cat = ("Esencial", "🔵")
+                            elif fat_pct < 21:  cat = ("Atlético", "🟢")
+                            elif fat_pct < 25:  cat = ("En forma", "🟢")
+                            elif fat_pct < 32:  cat = ("Normal",   "🟡")
+                            else:               cat = ("Obesidad",  "🔴")
+
+                        st.info(f"{cat[1]} Categoría: **{cat[0]}**")
+
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Error en el cálculo: {e}")
+
+        # Mostrar último resultado si no se acaba de calcular
+        with col_res:
+            cal_data = get_caliper_measurements(days=90)
+            if cal_data and not submitted:
+                st.subheader("📊 Último resultado")
+                last = cal_data[0]
+                st.caption(f"🕐 {last['date']} — {last['method']}")
+                st.metric("🥩 % Grasa corporal", f"{last['fat_percent']:.1f} %")
+                st.metric("🏃 Masa magra",        f"{last['lean_mass_kg']:.2f} kg")
+                st.metric("💧 Masa grasa",         f"{last['fat_mass_kg']:.2f} kg")
+                st.metric("⚖️ Peso",               f"{last['weight_kg']:.2f} kg")
+
+    # ── TAB: HISTORIAL ────────────────────────────────────────────────────────
+    with tab_hist:
+        cal_data  = get_caliper_measurements(days=180)
+        tape_data = get_tape_measurements(days=180)
+
+        if cal_data:
+            st.subheader("🔵 Evolución % grasa (caliper)")
+            chart_data = [{"timestamp": r["date"], "fat_percent": r["fat_percent"],
+                           "lean_mass_kg": r["lean_mass_kg"]} for r in reversed(cal_data)]
+            c1, c2 = st.columns(2)
+            with c1:
+                st.plotly_chart(make_line_chart(chart_data, "fat_percent",  "% Grasa",      "#EF9A9A"), key="cal_fat",  width="stretch")
+            with c2:
+                st.plotly_chart(make_line_chart(chart_data, "lean_mass_kg", "Masa magra kg","#A5D6A7"), key="cal_lean", width="stretch")
+
+            df_cal = pd.DataFrame(cal_data)[["date","method","weight_kg","fat_percent","lean_mass_kg","fat_mass_kg"]]
+            df_cal.columns = ["Fecha","Método","Peso (kg)","Grasa (%)","Magra (kg)","Grasa (kg)"]
+            st.dataframe(df_cal, width="stretch")
+            with st.expander("🗑️ Eliminar entrada caliper"):
+                del_cid2 = st.selectbox("Fecha  ", [r["id"] for r in cal_data],
+                                         format_func=lambda x: next(r["date"] for r in cal_data if r["id"]==x))
+                if st.button("Eliminar", key="del_cal2"):
+                    delete_caliper_measurement(del_cid2); st.rerun()
+
+        if tape_data:
+            st.subheader("📐 Evolución medidas (cinta)")
+            tape_chart = [{"timestamp": r["date"], **{k: r[k] for k in ["chest_cm","waist_cm","hips_cm","left_bicep_cm"]}}
+                          for r in reversed(tape_data)]
+            c1, c2 = st.columns(2)
+            with c1:
+                st.plotly_chart(make_line_chart(tape_chart, "waist_cm",      "Cintura (cm)", "#EF9A9A"), key="t_waist",  width="stretch")
+                st.plotly_chart(make_line_chart(tape_chart, "left_bicep_cm", "Bíceps (cm)",  "#4FC3F7"), key="t_bicep",  width="stretch")
+            with c2:
+                st.plotly_chart(make_line_chart(tape_chart, "chest_cm",      "Pecho (cm)",   "#A5D6A7"), key="t_chest",  width="stretch")
+                st.plotly_chart(make_line_chart(tape_chart, "hips_cm",       "Caderas (cm)", "#FFCC80"), key="t_hips",   width="stretch")
+
+        if not cal_data and not tape_data:
+            st.info("Sin mediciones registradas aún.")
 

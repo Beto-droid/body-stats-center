@@ -63,6 +63,45 @@ CREATE TABLE IF NOT EXISTS food_log (
     carbs_g      REAL NOT NULL,
     fat_g        REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS tape_measurements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    date            TEXT NOT NULL,
+    neck_cm         REAL,
+    chest_cm        REAL,
+    waist_cm        REAL,
+    hips_cm         REAL,
+    left_bicep_cm   REAL,
+    right_bicep_cm  REAL,
+    left_thigh_cm   REAL,
+    right_thigh_cm  REAL,
+    left_calf_cm    REAL,
+    right_calf_cm   REAL,
+    notes           TEXT
+);
+
+CREATE TABLE IF NOT EXISTS caliper_measurements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    date            TEXT NOT NULL,
+    method          TEXT NOT NULL,
+    weight_kg       REAL NOT NULL,
+    age             INTEGER NOT NULL,
+    sex             TEXT NOT NULL,
+    -- 3-site male: chest, abdomen, thigh
+    -- 3-site female: tricep, suprailiac, thigh
+    -- 7-site: chest, midaxillary, tricep, subscapular, abdomen, suprailiac, thigh
+    site1_mm        REAL,
+    site2_mm        REAL,
+    site3_mm        REAL,
+    site4_mm        REAL,
+    site5_mm        REAL,
+    site6_mm        REAL,
+    site7_mm        REAL,
+    fat_percent     REAL NOT NULL,
+    lean_mass_kg    REAL NOT NULL,
+    fat_mass_kg     REAL NOT NULL,
+    notes           TEXT
+);
 """
 
 def init_db() -> None:
@@ -235,4 +274,63 @@ def get_daily_nutrition(days: int = 30) -> list[dict]:
 def delete_food_entry(entry_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM food_log WHERE id = ?", (entry_id,))
+
+
+# ── Tape measurements ─────────────────────────────────────────────────────────
+
+def log_tape_measurement(date: str, neck=None, chest=None, waist=None, hips=None,
+                          left_bicep=None, right_bicep=None, left_thigh=None,
+                          right_thigh=None, left_calf=None, right_calf=None, notes="") -> None:
+    sql = """INSERT INTO tape_measurements
+             (date, neck_cm, chest_cm, waist_cm, hips_cm,
+              left_bicep_cm, right_bicep_cm, left_thigh_cm, right_thigh_cm,
+              left_calf_cm, right_calf_cm, notes)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"""
+    with _connect() as conn:
+        conn.execute(sql, (date, neck, chest, waist, hips,
+                           left_bicep, right_bicep, left_thigh, right_thigh,
+                           left_calf, right_calf, notes))
+
+
+def get_tape_measurements(days: int = 90) -> list[dict]:
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    sql = "SELECT * FROM tape_measurements WHERE date >= ? ORDER BY date DESC"
+    with _connect() as conn:
+        rows = conn.execute(sql, (since,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_tape_measurement(entry_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM tape_measurements WHERE id = ?", (entry_id,))
+
+
+# ── Caliper measurements ──────────────────────────────────────────────────────
+
+def log_caliper_measurement(date: str, method: str, weight_kg: float, age: int, sex: str,
+                             sites: list[float | None], fat_percent: float,
+                             lean_mass_kg: float, fat_mass_kg: float, notes: str = "") -> None:
+    sites_padded = (sites + [None] * 7)[:7]
+    sql = """INSERT INTO caliper_measurements
+             (date, method, weight_kg, age, sex,
+              site1_mm, site2_mm, site3_mm, site4_mm, site5_mm, site6_mm, site7_mm,
+              fat_percent, lean_mass_kg, fat_mass_kg, notes)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+    with _connect() as conn:
+        conn.execute(sql, (date, method, weight_kg, age, sex,
+                           *sites_padded, fat_percent, lean_mass_kg, fat_mass_kg, notes))
+
+
+def get_caliper_measurements(days: int = 90) -> list[dict]:
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    sql = "SELECT * FROM caliper_measurements WHERE date >= ? ORDER BY date DESC"
+    with _connect() as conn:
+        rows = conn.execute(sql, (since,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_caliper_measurement(entry_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM caliper_measurements WHERE id = ?", (entry_id,))
+
 

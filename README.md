@@ -1,58 +1,88 @@
 # mi-scale-automation
 
-![CLI with weight logs](https://raw.githubusercontent.com/barkayshahar/mi-scale-automation/main/showcase.png "Showcase")
+**mi-scale-automation** es un dashboard personal de salud y fitness que:
 
-**mi-scale-automation** is a Python script that automates the process of retrieving weight data from the Xiaomi Mi Scale 2 without the need to connect to Xiaomi's cloud services. This script is designed for users who want to use the scale with alternative apps, create custom applications, or log their weight privately to their own databases.
+- 📡 Lee datos de la balanza **Xiaomi Mi Scale 2** vía Bluetooth (sin cloud de Xiaomi)
+- ⚖️ Calcula composición corporal (grasa, músculo, agua, BMI, BMR...)
+- 🏋️ Registra entrenamientos y cardio
+- 🍽️ Trackea nutrición y macros
+- 📏 Mediciones corporales con cinta métrica y calibrador (Jackson-Pollock)
+- 📊 Gráficos históricos diarios/semanales/mensuales
+- 💾 Todo guardado localmente en SQLite
 
-It is based on the work of the [Bluetooth repository](https://github.com/wiecosystem/Bluetooth/tree/master), and it allows you to quickly and easily obtain your weight data.
+## Requisitos
 
-## Requirements
+- Python 3.10+
+- macOS / Linux con Bluetooth Low Energy (BLE)
+- Xiaomi Mi Scale 2
 
-Before using this script, make sure you have the following:
-
-- Python 3.10+ installed on your system.
-- A Xiaomi Mi Scale 2.
-- A Bluetooth adapter that supports Bluetooth Low Energy (BLE). This can be a built-in Bluetooth adapter or a USB dongle. Some Wi-Fi antennas also support BLE.
-
-## Installation
-
-To set up **mi-scale-automation**, follow these steps:
-
-1. Clone this repository to your local machine.
-2. (Optional) Create and activate a virtual environment:
+## Instalación
 
 ```bash
+git clone <repo>
+cd mi-scale-automation
+
 python3 -m venv .venv
 source .venv/bin/activate
-```
 
-3. Install the necessary Python packages:
-
-```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+## Configuración
 
-Once you've installed the script, you can easily retrieve your weight data by following these steps:
-  
-1. Ensure your Xiaomi Mi Scale 2 has fresh batteries and is within the Bluetooth range of your computer.
-2. Run the script by executing the following command in your terminal:
+Editá `user_config.py` con tus datos personales (necesario para los cálculos de composición corporal):
+
+```python
+HEIGHT_CM: int = 175   # altura en cm
+AGE: int = 30          # edad
+SEX: str = "male"      # "male" o "female"
+```
+
+## Uso
+
+```bash
+streamlit run gui.py
+```
+
+Esto abre el dashboard en `http://localhost:8501` **y** arranca automáticamente el scanner BLE en segundo plano.
+
+### Secciones del dashboard
+
+| Sección | Descripción |
+|---------|-------------|
+| ⚖️ Balanza | Última medición + historial de peso y composición corporal |
+| 🏋️ Gym | Registro de ejercicios, cardio y progresión |
+| 🍽️ Nutrición | Log de comidas con macros y calorías |
+| 📏 Mediciones | Cinta métrica + calibrador de grasa (Jackson-Pollock 3 y 7) |
+
+### Solo el scanner (sin GUI)
 
 ```bash
 python3 scan.py
 ```
-1. The script will run indefinitely and wait for you to step onto the scale.
-2. When you are stable on the scale, the script will print your weight.
-3. To stop the script, simply press `Ctrl+C`.
+
+## Docker
+
+```bash
+docker build -t mi-scale .
+docker run -p 8501:8501 --network host mi-scale
+```
+
+> **Nota:** El acceso a Bluetooth desde Docker requiere `--network host` en Linux.  
+> En macOS, Bluetooth dentro de Docker no está soportado — usá el modo normal.
+
+## Google Sheets (opcional)
+
+Para sincronizar mediciones a Google Sheets:
+
+1. Creá un proyecto en [console.cloud.google.com](https://console.cloud.google.com)
+2. Habilitá **Google Sheets API** y **Google Drive API**
+3. Creá una cuenta de servicio y descargá el JSON como `service_account.json`
+4. Creá una hoja llamada `Mi Scale Log` y compartila con el email de la cuenta de servicio
+5. El script la populará automáticamente en cada medición
 
 ## Troubleshooting
 
-If you encounter issues while trying to connect to the scale, consider the following troubleshooting steps:
-
-- Ensure your Xiaomi Mi Scale 2 has fresh batteries.
-- Verify that the scale is in close proximity to your computer.
-- Check that your Bluetooth adapter supports BLE and is properly connected.
-- Make sure your Bluetooth adapter is enabled and not blocked by rfkill.
-- Feel free to reach out if you encounter any issues beyond these troubleshooting steps.
-
+- **No encuentra la balanza**: verificá que tenga baterías y esté cerca. El nombre BLE debe ser `MIBFS`.
+- **Impedancia 0 / no calcula grasa**: colocá ambos pies descalzos sobre los electrodos.
+- **Bluetooth bloqueado en Linux**: `rfkill unblock bluetooth`
