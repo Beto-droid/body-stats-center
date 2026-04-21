@@ -11,7 +11,6 @@ It is based on the work of the [Bluetooth repository](https://github.com/wiecosy
 Before using this script, make sure you have the following:
 
 - Python 3.10+ installed on your system.
-- Poetry 1.8+ installed on your system.
 - A Xiaomi Mi Scale 2.
 - A Bluetooth adapter that supports Bluetooth Low Energy (BLE). This can be a built-in Bluetooth adapter or a USB dongle. Some Wi-Fi antennas also support BLE.
 
@@ -20,10 +19,17 @@ Before using this script, make sure you have the following:
 To set up **mi-scale-automation**, follow these steps:
 
 1. Clone this repository to your local machine.
-2. Install the necessary Python packages using Poetry:
+2. (Optional) Create and activate a virtual environment:
 
 ```bash
-poetry install
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+3. Install the necessary Python packages:
+
+```bash
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -34,7 +40,7 @@ Once you've installed the script, you can easily retrieve your weight data by fo
 2. Run the script by executing the following command in your terminal:
 
 ```bash
-poetry run python3 scan.py
+python3 scan.py
 ```
 1. The script will run indefinitely and wait for you to step onto the scale.
 2. When you are stable on the scale, the script will print your weight.
