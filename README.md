@@ -10,6 +10,13 @@
 - 📊 Gráficos históricos diarios/semanales/mensuales
 - 💾 Todo guardado localmente en SQLite
 
+## Créditos
+
+Este proyecto está basado en el trabajo de:
+- [barkayshahar/mi-scale-automation](https://github.com/barkayshahar/mi-scale-automation) — script original de lectura BLE
+- [wiecosystem/Bluetooth](https://github.com/wiecosystem/Bluetooth) — reverse engineering del protocolo Mi Scale
+- [lolouk44/xiaomi_mi_scale](https://github.com/lolouk44/xiaomi_mi_scale) — fórmulas de composición corporal
+
 ## Requisitos
 
 - Python 3.10+
