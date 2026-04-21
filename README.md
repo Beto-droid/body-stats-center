@@ -10,6 +10,16 @@
 - 📊 Gráficos históricos diarios/semanales/mensuales
 - 💾 Todo guardado localmente en SQLite
 
+## Screenshots
+
+| ⚖️ Balanza | 🏋️ Gym |
+|:---:|:---:|
+| ![Balanza](docs/screenshot_balanza.png) | ![Gym](docs/screenshot_gym.png) |
+
+| 🍽️ Nutrición | 📏 Mediciones |
+|:---:|:---:|
+| ![Nutrición](docs/screenshot_nutricion.png) | ![Mediciones](docs/screenshot_mediciones.png) |
+
 ## Créditos
 
 Este proyecto está basado en el trabajo de:
